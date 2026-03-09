@@ -7,13 +7,6 @@ services:
       - '6300:6300'
     environment:
       RUST_BACKTRACE: 'full'
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:6300/version']
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 10s
-
   indexer:
     container_name: 'midnight-indexer'
     image: 'midnightntwrk/indexer-standalone:3.0.0'
