@@ -7,7 +7,8 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "docker compose -f standalone.yml pull && node --experimental-specifier-resolution=node --loader ts-node/esm src/index.ts"
+    "clean": "docker rm -f midnight-node midnight-indexer midnight-proof-server 2>/dev/null; docker compose -f standalone.yml down --remove-orphans 2>/dev/null; true",
+    "start": "npm run clean && docker compose -f standalone.yml pull && node --experimental-specifier-resolution=node --loader ts-node/esm src/index.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/ledger-v7": "7.0.0",
