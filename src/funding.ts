@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as ledger from '@midnight-ntwrk/ledger-v7';
+import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { type Logger } from 'pino';
 import {
   type WalletContext,
@@ -45,7 +46,7 @@ interface AccountsFile {
  */
 async function transferNight(
   masterWallet: WalletContext,
-  receiverAddress: string,
+  receiverAddress: UnshieldedAddress,
   amount: bigint,
 ): Promise<string> {
   const ttl = new Date(Date.now() + 30 * 60 * 1000);
@@ -102,11 +103,11 @@ export async function fundFromConfigFile(
     const account = accountsFile.accounts[i];
     logger.info(`\n--- Account ${i + 1}/${accountsFile.accounts.length}: ${account.name} ---`);
 
-    // Derive wallet from mnemonic to get Bech32 address
+    // Derive wallet from mnemonic to get address
     const seed = await mnemonicToSeed(account.mnemonic);
     const recipientWallet = await initWalletWithSeed(seed, config);
-    const recipientAddress = recipientWallet.unshieldedKeystore.getBech32Address().asString();
-    logger.info(`Recipient address: ${recipientAddress}`);
+    const recipientAddress = await recipientWallet.wallet.unshielded.getAddress();
+    logger.info(`Recipient address: ${recipientWallet.unshieldedKeystore.getBech32Address().asString()}`);
 
     // Transfer NIGHT from master
     logger.info(`Transferring ${NIGHT_AMOUNT} NIGHT to ${account.name}...`);
@@ -151,34 +152,38 @@ export async function fundFromConfigFile(
 export async function fundFromPublicKeys(
   masterWallet: WalletContext,
   pubKeysInput: string,
+  config: Config,
 ): Promise<FundedAccount[]> {
-  const addresses = pubKeysInput
+  const addressStrings = pubKeysInput
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
-  if (addresses.length === 0) {
+  if (addressStrings.length === 0) {
     throw new Error('No addresses provided');
   }
 
-  if (addresses.length > MAX_ACCOUNTS) {
-    throw new Error(`Too many addresses: max ${MAX_ACCOUNTS}, got ${addresses.length}`);
+  if (addressStrings.length > MAX_ACCOUNTS) {
+    throw new Error(`Too many addresses: max ${MAX_ACCOUNTS}, got ${addressStrings.length}`);
   }
 
-  logger.info(`Funding ${addresses.length} addresses with NIGHT only...`);
+  logger.info(`Funding ${addressStrings.length} addresses with NIGHT only...`);
   const funded: FundedAccount[] = [];
 
-  for (let i = 0; i < addresses.length; i++) {
-    const address = addresses[i];
-    logger.info(`\n--- Address ${i + 1}/${addresses.length}: ${address} ---`);
+  for (let i = 0; i < addressStrings.length; i++) {
+    const addressStr = addressStrings[i];
+    logger.info(`\n--- Address ${i + 1}/${addressStrings.length}: ${addressStr} ---`);
+
+    const parsed = MidnightBech32m.parse(addressStr);
+    const unshieldedAddress = UnshieldedAddress.codec.decode(config.networkId as any, parsed);
 
     logger.info(`Transferring ${NIGHT_AMOUNT} NIGHT...`);
-    const txId = await transferNight(masterWallet, address, NIGHT_AMOUNT);
+    const txId = await transferNight(masterWallet, unshieldedAddress, NIGHT_AMOUNT);
     logger.info(`Transfer submitted: ${txId}`);
 
     funded.push({
-      name: address,
-      unshieldedAddr: address,
+      name: addressStr,
+      unshieldedAddr: addressStr,
       shieldedAddr: 'N/A',
       dustAddr: 'N/A',
       nightBalance: NIGHT_AMOUNT,
@@ -186,6 +191,6 @@ export async function fundFromPublicKeys(
     });
   }
 
-  logger.info(`\nAll ${addresses.length} addresses funded with NIGHT (DUST not registered - recipients must do it themselves).`);
+  logger.info(`\nAll ${addressStrings.length} addresses funded with NIGHT (DUST not registered - recipients must do it themselves).`);
   return funded;
 }

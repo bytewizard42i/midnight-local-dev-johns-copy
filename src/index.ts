@@ -5,7 +5,7 @@ import { type StartedDockerComposeEnvironment } from 'testcontainers';
 import { type Logger } from 'pino';
 import { StandaloneConfig } from './config.js';
 import { createLogger } from './logger.js';
-import { startNetwork, stopNetwork } from './network.js';
+import { isNetworkRunning, startNetwork, freshStart, stopNetwork } from './network.js';
 import {
   type WalletContext,
   setLogger as setWalletLogger,
@@ -72,7 +72,7 @@ async function mainMenu(
         }
         case '2': {
           const pubKeys = await rli.question('Enter Bech32 addresses (comma-separated): ');
-          const accounts = await fundFromPublicKeys(masterWallet, pubKeys);
+          const accounts = await fundFromPublicKeys(masterWallet, pubKeys, config);
           fundedAccounts.push(...accounts);
           break;
         }
@@ -111,8 +111,20 @@ async function main(): Promise<void> {
   let masterWallet: WalletContext | null = null;
 
   try {
-    // 1. Start docker compose network
-    env = await startNetwork(config, logger);
+    // 1. Detect or start docker compose network
+    if (isNetworkRunning()) {
+      logger.info('Detected a running Midnight local network.');
+      const startChoice = await rli.question(
+        '\nA local dev network is already running:\n  [1] Use the existing network\n  [2] Stop containers, pull latest images, and restart\n> ',
+      );
+      if (startChoice.trim() === '2') {
+        env = await freshStart(config, logger);
+      } else {
+        logger.info('Using existing network.');
+      }
+    } else {
+      env = await startNetwork(config, logger);
+    }
 
     // 2. Initialize master wallet from genesis seed
     logger.info('Initializing master wallet from genesis seed...');

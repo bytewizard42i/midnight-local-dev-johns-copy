@@ -41,14 +41,24 @@ npm start
 
 This single command will:
 
-1. **Pull** the latest Docker images for the Midnight node, indexer, and proof server
-2. **Start** all three containers with health checks
-3. **Initialize** the genesis master wallet (seed `0x00...001`) which holds all minted NIGHT tokens
-4. **Register DUST** for the master wallet (required to pay transaction fees)
-5. **Display** the master wallet balance
-6. **Present an interactive menu** for funding test accounts
+1. **Detect** if a local Midnight network is already running
+   - If running: prompt to **reuse** it or **restart** with fresh images
+   - If not running: **pull** Docker images and **start** all containers
+2. **Initialize** the genesis master wallet (seed `0x00...001`) which holds all minted NIGHT tokens
+3. **Register DUST** for the master wallet (required to pay transaction fees)
+4. **Display** the master wallet balance
+5. **Present an interactive menu** for funding test accounts
 
-Once running, you'll see:
+If a network is already running, you'll first see:
+
+```
+A local dev network is already running:
+  [1] Use the existing network
+  [2] Stop containers, pull latest images, and restart
+>
+```
+
+Then the main menu:
 
 ```
 Choose an option:
@@ -59,7 +69,7 @@ Choose an option:
 >
 ```
 
-When you select `[4] Exit` or press `Ctrl+C`, the tool gracefully shuts down all wallets and stops the Docker containers.
+When you select `[4] Exit` or press `Ctrl+C`, the tool gracefully shuts down all wallets. Docker containers are only stopped if they were started by this session (reusing an existing network leaves containers running).
 
 ---
 
@@ -82,9 +92,23 @@ All services use the `undeployed` network ID with the `dev` node preset.
 
 | Service | Image | Version |
 |---|---|---|
-| Node | `midnightntwrk/midnight-node` | `0.20.0` |
-| Indexer | `midnightntwrk/indexer-standalone` | `3.0.0` |
+| Node | `midnightntwrk/midnight-node` | `0.21.0` |
+| Indexer | `midnightntwrk/indexer-standalone` | `3.1.0` |
 | Proof Server | `midnightntwrk/proof-server` | `7.0.0` |
+
+### Wallet SDK Compatibility Matrix
+
+| Package | Version |
+|---|---|
+| `@midnight-ntwrk/wallet-sdk-facade` | 2.0.0 |
+| `@midnight-ntwrk/wallet-sdk-abstractions` | 2.0.0 |
+| `@midnight-ntwrk/wallet-sdk-shielded` | 2.0.0 |
+| `@midnight-ntwrk/wallet-sdk-dust-wallet` | 2.0.0 |
+| `@midnight-ntwrk/wallet-sdk-unshielded-wallet` | 2.0.0 |
+| `@midnight-ntwrk/wallet-sdk-address-format` | 3.0.1 |
+| `@midnight-ntwrk/wallet-sdk-hd` | 3.0.1 |
+| `@midnight-ntwrk/ledger-v7` | 7.0.2 |
+| `@midnight-ntwrk/midnight-js-network-id` | 3.1.0 |
 
 ---
 
@@ -278,14 +302,18 @@ Copy `.env.example` to `.env` and configure as needed:
 ### Startup Sequence
 
 ```
-1. docker compose up
-   ├── midnight-node starts (waits for health: /health endpoint)
-   ├── midnight-indexer starts (waits for: "starting indexing" log)
-   └── midnight-proof-server starts (waits for: "Actix runtime found" log)
+1. Network detection
+   ├── Check if midnight-node, midnight-indexer, midnight-proof-server are running
+   ├── If running → prompt: reuse existing or restart fresh
+   └── If not running → docker compose up
+       ├── midnight-node starts (waits for health: /health endpoint)
+       ├── midnight-indexer starts (waits for: "starting indexing" log)
+       └── midnight-proof-server starts (waits for: "Actix runtime found" log)
 
-2. Master wallet initialization
+2. Master wallet initialization (WalletFacade.init)
    ├── Derive HD wallet from genesis seed (0x00...001)
-   ├── Create shielded, unshielded, and dust wallets
+   ├── Create unified DefaultConfiguration
+   ├── Initialize WalletFacade with shielded, unshielded, and dust builders
    ├── Start wallet facade and wait for sync
    └── Display genesis NIGHT balance
 
@@ -298,7 +326,7 @@ Copy `.env.example` to `.env` and configure as needed:
 
 5. Cleanup on exit
    ├── Close all wallet connections
-   └── docker compose down
+   └── docker compose down (only if network was started by this session)
 ```
 
 ### Key Concepts
