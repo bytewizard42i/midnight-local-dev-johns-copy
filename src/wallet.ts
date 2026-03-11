@@ -1,6 +1,6 @@
 import * as ledger from '@midnight-ntwrk/ledger-v7';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
-import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
+import { type DefaultConfiguration, WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
 import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
 import {
@@ -10,7 +10,7 @@ import {
   type UnshieldedKeystore,
   UnshieldedWallet,
 } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
-import { DustAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import * as bip39 from '@scure/bip39';
 import { wordlist as english } from '@scure/bip39/wordlists/english.js';
 import { type Logger } from 'pino';
@@ -73,54 +73,29 @@ export const initWalletWithSeed = async (
 
   const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(derivationResult.keys[Roles.Zswap]);
   const dustSecretKey = ledger.DustSecretKey.fromSeed(derivationResult.keys[Roles.Dust]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const unshieldedKeystore = createKeystore(derivationResult.keys[Roles.NightExternal], config.networkId as any);
+  const unshieldedKeystore = createKeystore(derivationResult.keys[Roles.NightExternal], config.networkId);
 
-  const relayURL = new URL(config.node.replace(/^http/, 'ws'));
-
-  const shieldedConfig = {
+  const configuration: DefaultConfiguration = {
     networkId: config.networkId,
     indexerClientConnection: {
       indexerHttpUrl: config.indexer,
       indexerWsUrl: config.indexerWS,
     },
     provingServerUrl: new URL(config.proofServer),
-    relayURL,
-  };
-
-  const unshieldedConfig = {
-    networkId: config.networkId,
-    indexerClientConnection: {
-      indexerHttpUrl: config.indexer,
-      indexerWsUrl: config.indexerWS,
-    },
-    txHistoryStorage: new InMemoryTransactionHistoryStorage(),
-  };
-
-  const dustConfig = {
-    networkId: config.networkId,
+    relayURL: new URL(config.node.replace(/^http/, 'ws')),
     costParameters: {
       additionalFeeOverhead: 300_000_000_000_000n,
       feeBlocksMargin: 5,
     },
-    indexerClientConnection: {
-      indexerHttpUrl: config.indexer,
-      indexerWsUrl: config.indexerWS,
-    },
-    provingServerUrl: new URL(config.proofServer),
-    relayURL,
+    txHistoryStorage: new InMemoryTransactionHistoryStorage(),
   };
 
-  const shieldedWallet = ShieldedWallet(shieldedConfig).startWithSecretKeys(shieldedSecretKeys);
-  const unshieldedWallet = UnshieldedWallet(unshieldedConfig).startWithPublicKey(
-    UnshieldedPublicKey.fromKeyStore(unshieldedKeystore),
-  );
-  const dustWallet = DustWallet(dustConfig).startWithSecretKey(
-    dustSecretKey,
-    ledger.LedgerParameters.initialParameters().dust,
-  );
-
-  const facade: WalletFacade = new WalletFacade(shieldedWallet, unshieldedWallet, dustWallet);
+  const facade: WalletFacade = await WalletFacade.init({
+    configuration,
+    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
+    unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(UnshieldedPublicKey.fromKeyStore(unshieldedKeystore)),
+    dust: (cfg) => DustWallet(cfg).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
+  });
   await facade.start(shieldedSecretKeys, dustSecretKey);
 
   return { wallet: facade, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
@@ -171,7 +146,7 @@ export const displayWalletBalances = async (walletContext: WalletContext, config
   const state = await Rx.firstValueFrom(walletContext.wallet.state());
   const unshielded = state.unshielded?.balances[ledger.nativeToken().raw] ?? 0n;
   const shielded = state.shielded?.balances[ledger.nativeToken().raw] ?? 0n;
-  const dust = state.dust?.walletBalance(new Date()) ?? 0n;
+  const dust = state.dust?.balance(new Date()) ?? 0n;
 
   const unshieldedAddr = walletContext.unshieldedKeystore.getBech32Address().asString();
   const shieldedAddr = MidnightBech32m.encode(config.networkId, state.shielded.address).asString();
@@ -200,7 +175,7 @@ export const registerNightForDust = async (walletContext: WalletContext): Promis
   if (unregisteredNightUtxos.length === 0) {
     logger.info('No unshielded Night UTXOs available for dust registration, or all are already registered');
 
-    const dustBalance = state.dust?.walletBalance(new Date()) ?? 0n;
+    const dustBalance = state.dust?.balance(new Date()) ?? 0n;
     logger.info(`Current dust balance: ${dustBalance}`);
 
     return dustBalance > 0n;
@@ -228,10 +203,10 @@ export const registerNightForDust = async (walletContext: WalletContext): Promis
       walletContext.wallet.state().pipe(
         Rx.throttleTime(5_000),
         Rx.tap((s) => {
-          const dustBalance = s.dust?.walletBalance(new Date()) ?? 0n;
+          const dustBalance = s.dust?.balance(new Date()) ?? 0n;
           logger.info(`Dust balance: ${dustBalance}`);
         }),
-        Rx.filter((s) => (s.dust?.walletBalance(new Date()) ?? 0n) > 0n),
+        Rx.filter((s) => (s.dust?.balance(new Date()) ?? 0n) > 0n),
       ),
     );
 

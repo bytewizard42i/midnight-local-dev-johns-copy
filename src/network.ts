@@ -1,13 +1,55 @@
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { DockerComposeEnvironment, Wait, type StartedDockerComposeEnvironment } from 'testcontainers';
 import { type Config } from './config.js';
 import { currentDir } from './config.js';
 import { type Logger } from 'pino';
 
+const CONTAINER_NAMES = ['midnight-node', 'midnight-indexer', 'midnight-proof-server'];
+
 export const createDockerEnv = (): DockerComposeEnvironment => {
   return new DockerComposeEnvironment(path.resolve(currentDir, '..'), 'standalone.yml')
     .withWaitStrategy('midnight-proof-server', Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1))
     .withWaitStrategy('midnight-indexer', Wait.forLogMessage(/starting indexing/, 1));
+};
+
+/**
+ * Check if the Midnight local network containers are already running.
+ */
+export const isNetworkRunning = (): boolean => {
+  try {
+    const result = execSync(
+      `docker ps --filter "status=running" --format "{{.Names}}"`,
+      { encoding: 'utf-8' },
+    );
+    const running = result.trim().split('\n').filter(Boolean);
+    return CONTAINER_NAMES.every((name) => running.includes(name));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Stop and remove existing Midnight containers, pull fresh images, and start.
+ */
+export const freshStart = async (config: Config, logger: Logger): Promise<StartedDockerComposeEnvironment> => {
+  logger.info('Stopping existing containers...');
+  try {
+    execSync(
+      `docker rm -f ${CONTAINER_NAMES.join(' ')} 2>/dev/null; docker compose -f standalone.yml down --remove-orphans 2>/dev/null`,
+      { cwd: path.resolve(currentDir, '..'), stdio: 'ignore' },
+    );
+  } catch {
+    // ignore cleanup errors
+  }
+
+  logger.info('Pulling latest images...');
+  execSync('docker compose -f standalone.yml pull', {
+    cwd: path.resolve(currentDir, '..'),
+    stdio: 'inherit',
+  });
+
+  return startNetwork(config, logger);
 };
 
 export const startNetwork = async (config: Config, logger: Logger): Promise<StartedDockerComposeEnvironment> => {
