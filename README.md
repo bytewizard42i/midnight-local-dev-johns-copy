@@ -29,7 +29,7 @@ A standalone tool for running a local Midnight development network and funding t
 ## Installation
 
 ```bash
-cd midnight-local-network
+cd midnight-local-dev
 npm install
 ```
 
