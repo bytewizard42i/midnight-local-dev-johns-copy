@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { DockerComposeEnvironment, Wait, type StartedDockerComposeEnvironment } from 'testcontainers';
 import { type Config } from './config.js';
 import { currentDir } from './config.js';
@@ -18,8 +18,9 @@ export const createDockerEnv = (): DockerComposeEnvironment => {
  */
 export const isNetworkRunning = (): boolean => {
   try {
-    const result = execSync(
-      `docker ps --filter "status=running" --format "{{.Names}}"`,
+    const result = execFileSync(
+      'docker',
+      ['ps', '--filter', 'status=running', '--format', '{{.Names}}'],
       { encoding: 'utf-8' },
     );
     const running = result.trim().split('\n').filter(Boolean);
@@ -34,18 +35,21 @@ export const isNetworkRunning = (): boolean => {
  */
 export const freshStart = async (config: Config, logger: Logger): Promise<StartedDockerComposeEnvironment> => {
   logger.info('Stopping existing containers...');
+  const cwd = path.resolve(currentDir, '..');
   try {
-    execSync(
-      `docker rm -f ${CONTAINER_NAMES.join(' ')} 2>/dev/null; docker compose -f standalone.yml down --remove-orphans 2>/dev/null`,
-      { cwd: path.resolve(currentDir, '..'), stdio: 'ignore' },
-    );
+    execFileSync('docker', ['rm', '-f', ...CONTAINER_NAMES], { cwd, stdio: 'ignore' });
   } catch {
-    // ignore cleanup errors
+    // ignore if containers don't exist
+  }
+  try {
+    execFileSync('docker', ['compose', '-f', 'standalone.yml', 'down', '--remove-orphans'], { cwd, stdio: 'ignore' });
+  } catch {
+    // ignore if compose isn't running
   }
 
   logger.info('Pulling latest images...');
-  execSync('docker compose -f standalone.yml pull', {
-    cwd: path.resolve(currentDir, '..'),
+  execFileSync('docker', ['compose', '-f', 'standalone.yml', 'pull'], {
+    cwd,
     stdio: 'inherit',
   });
 
