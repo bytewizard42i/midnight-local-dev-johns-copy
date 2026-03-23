@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as ledger from '@midnight-ntwrk/ledger-v7';
+import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import pino, { type Logger } from 'pino';
 import {
