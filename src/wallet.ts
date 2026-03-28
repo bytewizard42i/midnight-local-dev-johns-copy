@@ -1,4 +1,4 @@
-import * as ledger from '@midnight-ntwrk/ledger-v7';
+import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { type DefaultConfiguration, WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
@@ -13,7 +13,7 @@ import {
 import { DustAddress, MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import * as bip39 from '@scure/bip39';
 import { wordlist as english } from '@scure/bip39/wordlists/english.js';
-import { type Logger } from 'pino';
+import pino, { type Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { WebSocket } from 'ws';
 import { Buffer } from 'buffer';
@@ -29,7 +29,7 @@ export interface WalletContext {
   unshieldedKeystore: UnshieldedKeystore;
 }
 
-let logger: Logger;
+let logger: Logger = pino({ level: 'silent' });
 
 export function setLogger(_logger: Logger): void {
   logger = _logger;

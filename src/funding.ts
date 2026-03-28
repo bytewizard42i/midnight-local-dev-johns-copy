@@ -1,7 +1,8 @@
 import * as fs from 'node:fs/promises';
-import * as ledger from '@midnight-ntwrk/ledger-v7';
+import * as path from 'node:path';
+import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
-import { type Logger } from 'pino';
+import pino, { type Logger } from 'pino';
 import {
   type WalletContext,
   mnemonicToSeed,
@@ -17,7 +18,7 @@ import { type Config } from './config.js';
 const NIGHT_AMOUNT = 50_000n * 10n ** 6n; // 50,000 NIGHT in smallest unit
 const MAX_ACCOUNTS = 10;
 
-let logger: Logger;
+let logger: Logger = pino({ level: 'silent' });
 
 export function setLogger(_logger: Logger): void {
   logger = _logger;
@@ -85,7 +86,13 @@ export async function fundFromConfigFile(
   configPath: string,
   config: Config,
 ): Promise<FundedAccount[]> {
-  const raw = await fs.readFile(configPath, 'utf-8');
+  const resolved = path.resolve(configPath);
+  const projectRoot = path.resolve(process.cwd());
+  if (!resolved.startsWith(projectRoot + path.sep) && resolved !== projectRoot) {
+    throw new Error(`Config path must be within the project directory: ${projectRoot}`);
+  }
+
+  const raw = await fs.readFile(resolved, 'utf-8');
   const accountsFile: AccountsFile = JSON.parse(raw);
 
   if (!accountsFile.accounts || !Array.isArray(accountsFile.accounts)) {
@@ -175,7 +182,8 @@ export async function fundFromPublicKeys(
     logger.info(`\n--- Address ${i + 1}/${addressStrings.length}: ${addressStr} ---`);
 
     const parsed = MidnightBech32m.parse(addressStr);
-    const unshieldedAddress = UnshieldedAddress.codec.decode(config.networkId as any, parsed);
+    // networkId type mismatch between Config (string) and codec (branded type)
+    const unshieldedAddress = UnshieldedAddress.codec.decode(config.networkId as Parameters<typeof UnshieldedAddress.codec.decode>[0], parsed);
 
     logger.info(`Transferring ${NIGHT_AMOUNT} NIGHT...`);
     const txId = await transferNight(masterWallet, unshieldedAddress, NIGHT_AMOUNT);
