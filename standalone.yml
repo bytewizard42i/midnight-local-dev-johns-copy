@@ -1,7 +1,13 @@
+# Image tags bumped Aug 1 2026 (Penny) to the support-matrix trio validated
+# by the official ZK Loan example: node 1.0.0 / proof-server 8.1.0 /
+# indexer 4.3.3 — pairs with Midnight.js 4.1.1 + compact-runtime 0.16.0
+# (compactc 0.31.1 artifacts). Previous: node 0.22.3 / proof 8.0.3 /
+# indexer 4.0.1 (April 2026 generation; funding CLI in src/ still targets
+# that older wallet-SDK generation — use the genesis seed directly instead).
 services:
   proof-server:
     container_name: 'midnight-proof-server'
-    image: 'midnightntwrk/proof-server:8.0.3'
+    image: 'midnightntwrk/proof-server:8.1.0'
     command: ['midnight-proof-server -v']
     ports:
       - '127.0.0.1:6300:6300'
@@ -9,7 +15,7 @@ services:
       RUST_BACKTRACE: 'full'
   indexer:
     container_name: 'midnight-indexer'
-    image: 'midnightntwrk/indexer-standalone:4.0.1'
+    image: 'midnightntwrk/indexer-standalone:4.3.3'
     env_file: standalone.env.example
     ports:
       - '127.0.0.1:8088:8088'
@@ -27,7 +33,7 @@ services:
         condition: service_healthy
 
   node:
-    image: 'midnightntwrk/midnight-node:0.22.3'
+    image: 'midnightntwrk/midnight-node:1.0.0'
     container_name: 'midnight-node'
     ports:
       - '127.0.0.1:9944:9944'
